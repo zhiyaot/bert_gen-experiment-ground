@@ -1,0 +1,4 @@
+ENCODER/huffmanMem -> mem_0
+HIST/histMem -> mem_1
+CONSUMER/resultsMem -> mem_2
+PRODUCER/rawTextMem -> mem_3
