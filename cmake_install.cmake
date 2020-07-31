@@ -1,4 +1,4 @@
-# Install script for directory: /home/zhiyaot/Documents/bert_gen
+# Install script for directory: /home/zhiyaot/Desktop/bert_gen
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -45,5 +45,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/zhiyaot/Documents/bert_gen/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/zhiyaot/Desktop/bert_gen/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
