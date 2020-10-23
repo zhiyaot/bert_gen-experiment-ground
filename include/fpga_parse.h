@@ -17,4 +17,6 @@ void read_ultra96(FILE *curr, map<uint32_t, unique_ptr<frame_pos>> &bit_map,
                   map<uint32_t, unique_ptr<frame_pos>> &par_bit_map,
                   const char *format = "Bit %s 0x%x %d %s %s Block=RAMB%d_X%dY%d RAM=B:%s\n");
 
+uint32_t get_IDCODE(FILE* file);
+
 #endif //BERT_GEN_FPGA_PARSE_H

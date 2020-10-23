@@ -1,3 +1,0 @@
-/home/zhiyaot/Documents/IC/bert_gen/CMakeFiles/rebuild_cache.dir
-/home/zhiyaot/Documents/IC/bert_gen/CMakeFiles/edit_cache.dir
-/home/zhiyaot/Documents/IC/bert_gen/CMakeFiles/bert_gen.dir

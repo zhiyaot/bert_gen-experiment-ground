@@ -1,4 +1,4 @@
-ENCODER/huffmanMem -> mem_0
-HIST/histMem -> mem_1
+HIST/histMem -> mem_0
+PRODUCER/rawTextMem -> mem_1
 CONSUMER/resultsMem -> mem_2
-PRODUCER/rawTextMem -> mem_3
+ENCODER/huffmanMem -> mem_3

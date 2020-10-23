@@ -1,0 +1,12 @@
+genblk1[10].mem/ram -> mem_0
+genblk1[0].mem/ram -> mem_1
+genblk1[8].mem/ram -> mem_2
+genblk1[9].mem/ram -> mem_3
+genblk1[7].mem/ram -> mem_4
+genblk1[1].mem/ram -> mem_5
+genblk1[2].mem/ram -> mem_6
+genblk1[3].mem/ram -> mem_7
+genblk1[11].mem/ram -> mem_8
+genblk1[5].mem/ram -> mem_9
+genblk1[4].mem/ram -> mem_10
+genblk1[6].mem/ram -> mem_11

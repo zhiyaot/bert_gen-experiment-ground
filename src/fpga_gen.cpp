@@ -6,49 +6,86 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstring>
 #include <iostream>
 #include <list>
 #include <memory>
 #include <string>
 
 #include "../include/fpga_helper.h"
-#include "../include/fpga_parse.h"
 #include "../include/fpga_type.h"
+#include "../include/fpga_parse.h"
 
 using namespace std;
 
 #define _MAX_PATH_LENGTH_ 256
 #define _ULTRA96_STYLE_ "Bit %s 0x%x %d %s %s Block=RAMB%d_X%dY%d RAM=B:%s\n"
 
+#ifndef NDEBUG
+#define ASSERT(condition, message)                                             \
+    do                                                                         \
+    {                                                                          \
+        if (!(condition))                                                      \
+        {                                                                      \
+            std::cerr << "Assertion `" #condition "` failed in " << __FILE__   \
+                      << " line " << __LINE__ << ": " << message << std::endl; \
+            std::terminate();                                                  \
+        }                                                                      \
+    } while (false)
+#else
+#define ASSERT(condition, message) \
+    do                             \
+    {                              \
+    } while (false)
+#endif
+
+//#define USE_DATABASE
+
 void gen_header(const char *path, const char *header_name)
 {
     char filePath[_MAX_PATH_LENGTH_] = {'\0'};
     sprintf(filePath, "%s/%s.h", path, header_name);
     auto header_h = fopen(filePath, "w");
+    ASSERT(header_h != nullptr, "Unable to write header file .c");
 
     sprintf(filePath, "%s/%s.c", path, header_name);
     auto header_c = fopen(filePath, "w");
+    ASSERT(header_c != nullptr, "Unable to write header file .h");
 
     sprintf(filePath, "%s/list_of_logical.list", path);
     auto list = fopen(filePath, "r");
+    ASSERT(list != nullptr, "Unable locate list_of_logical.list");
+
+    sprintf(filePath, "%s/top.bit", path);
+    auto bitstream = fopen(filePath, "rb");
+    ASSERT(bitstream != nullptr, "Unable locate bitstream");
     map<uint32_t, string> all_logical;
 
     parse_list(list, all_logical);
     fclose(list);
 
-    print_preproc(all_logical, header_h);
-    print_preproc(all_logical, header_c);
+    uint32_t IDCODE = get_IDCODE(bitstream);
+    print_preproc(all_logical, header_h, IDCODE);
+    print_preproc(all_logical, header_c, IDCODE);
 
     print_header(header_h);
     fclose(header_h);
 
     std::list<unique_ptr<logical_memory>> logical_memories;
 
+    map<uint32_t, unique_ptr<frame_pos>> bit_map;
+    map<uint32_t, unique_ptr<frame_pos>> par_bit_map;
+
+#ifndef USE_DATABASE
+    sprintf(filePath, "%s/top.ll", path);
+    auto ll = fopen(filePath, "r");
+    read_ultra96(ll, bit_map, par_bit_map, _ULTRA96_STYLE_);
+#endif
+
     print_logicalNames(header_c, all_logical);
     for (pair<uint32_t, string> logical : all_logical)
     {
-        print_frame(path, logical, header_c, logical_memories);
+
+        print_frame(path, logical, header_c, logical_memories, bit_map, par_bit_map);
     }
 
     fprintf(header_c, "\n\nstruct logical_memory logical_memories[NUM_LOGICAL] =\n");
@@ -57,8 +94,9 @@ void gen_header(const char *path, const char *header_name)
     {
         auto loc_mem = logical_memories.front().get();
 
-        fprintf(header_c, "                {%d, %d, %d, mem%d_frame_ranges, mem%d_bitlocs}",
-                loc_mem->nframe_ranges, loc_mem->wordlen, loc_mem->words, loc_mem->num, loc_mem->num);
+        fprintf(header_c, "                {%d, %d, %d, %d, mem%d_frame_ranges, mem%d_bitlocs}",
+                loc_mem->nframe_ranges, loc_mem->wordlen, loc_mem->words,
+                loc_mem->replica, loc_mem->num, loc_mem->num);
         if (!logical_memories.empty())
         {
             fprintf(header_c, ",");
@@ -89,18 +127,19 @@ void print_logicalNames(FILE *header_c, map<uint32_t, string> &all_logical)
     fprintf(header_c, "\n        };\n\n\n");
 }
 
-void print_preproc(map<uint32_t, string> &all_logical, FILE *file)
+void print_preproc(map<uint32_t, string> &all_logical, FILE *outFile, uint32_t IDCODE)
 {
-    fprintf(file, "#include \"bert_types.h\"\n\n");
-    fprintf(file, "#define NUM_LOGICAL %d\n\n", all_logical.size());
+    fprintf(outFile, "#include \"bert_types.h\"\n\n");
+    fprintf(outFile, "#define NUM_LOGICAL %ld\n\n", all_logical.size());
+    fprintf(outFile, "#define IDCODE %d\n\n", IDCODE);
 
     int i = 0;
     for (const pair<const unsigned int, basic_string<char>> &logical : all_logical)
     {
-        fprintf(file, "#define MEM_%d %d\n", logical.first, i);
+        fprintf(outFile, "#define MEM_%d %d\n", logical.first, i);
         i++;
     }
-    fprintf(file, "\n");
+    fprintf(outFile, "\n");
 }
 
 void print_header(FILE *header_h)
@@ -110,12 +149,14 @@ void print_header(FILE *header_h)
 }
 
 void print_frame(const char *path, pair<uint32_t, string> &logical, FILE *header_c,
-                 list<unique_ptr<logical_memory>> &logical_memories)
+                 list<unique_ptr<logical_memory>> &logical_memories,
+                 map<uint32_t, unique_ptr<frame_pos>> &bit_map, map<uint32_t, unique_ptr<frame_pos>> &par_bit_map)
 {
-    map<uint32_t, unique_ptr<frame_pos>> bit_map;
-    map<uint32_t, unique_ptr<frame_pos>> par_bit_map;
     list<unique_ptr<bram>> list_of_bram;
+
+#if defined(USE_DATABASE)
     find_map(path, bit_map, par_bit_map, list_of_bram, logical.first);
+#endif
 
     char filePath[_MAX_PATH_LENGTH_] = {'\0'};
     sprintf(filePath, "%s/mem_%d.info", path, logical.first);
@@ -128,10 +169,12 @@ void print_frame(const char *path, pair<uint32_t, string> &logical, FILE *header
         fasm_bit{0}, bit{0};
 
     uint32_t bit_tracking{0}, xyz{0};
+    cout << bit_map.size() << endl;
+    cout << par_bit_map.size() << endl;
 
     auto temp_list_of_addr = make_unique<list<pair<uint32_t, uint32_t>>>();
     auto final_list_of_addr = make_unique<list<pair<uint32_t, uint32_t>>>();
-    auto first = true;
+    auto replica = 1, curr_rep = 1;
     while (fscanf(bram_file, "%[^\n]\n", line) != EOF)
     {
 
@@ -142,12 +185,26 @@ void print_frame(const char *path, pair<uint32_t, string> &logical, FILE *header
                    &bram_y, &width, &fasm_y, &fasm_p, &fasm_line, &fasm_bit, &bit) == 11)
         {
 
-            if (bit_tracking == loc_bit)
+            if (bit_tracking == loc_bit || bit_tracking == loc_bit + 1)
             {
 
                 assert(bram_type == 36 || bram_type == 18);
 
                 bram_type == 36 ? xyz = fasm_line * 512 + 2 *fasm_bit + fasm_y : xyz = fasm_line * 256 + fasm_bit;
+
+                if (bit_tracking == loc_bit + 1 && loc_line == 0 && loc_bit == 0)
+                {
+                    replica++;
+                }
+
+                if (bit_tracking == loc_bit + 1)
+                {
+                    curr_rep++;
+                }
+                else
+                {
+                    assert(replica == curr_rep);
+                }
 
                 if (!fasm_p)
                 {
@@ -173,17 +230,16 @@ void print_frame(const char *path, pair<uint32_t, string> &logical, FILE *header
                 {
                     bit_tracking++;
                 }
-
-                // sanity checking for the input BRAM type
             }
             else
             {
+                cerr << "WARNING: Possible Bit-skipping detected" << endl;
                 break;
             }
         }
     }
 
-    fprintf(header_c, "struct bit_loc mem%d_bitlocs[%d] =\n", logical.first, final_list_of_addr->size());
+    fprintf(header_c, "struct bit_loc mem%d_bitlocs[%ld] =\n", logical.first, final_list_of_addr->size());
     fprintf(header_c, "        {\n");
 
     for (auto i = final_list_of_addr->begin(); i != final_list_of_addr->end(); i++)
@@ -222,7 +278,8 @@ void print_frame(const char *path, pair<uint32_t, string> &logical, FILE *header
     fprintf(header_c, "struct frame_range mem%d_frame_ranges[%d] =\n", logical.first, nframe_range);
     fprintf(header_c, "        {\n");
     logical_memories.emplace_back(make_unique<logical_memory>(nframe_range, width,
-                                                              final_list_of_addr->size() / width, logical.first));
+                                                              final_list_of_addr->size() / width,
+                                                              logical.first, replica));
 
     for (int i = 0; i < 6; ++i)
     {
@@ -242,10 +299,12 @@ void print_frame(const char *path, pair<uint32_t, string> &logical, FILE *header
     }
     fprintf(header_c, "        };\n\n");
 
+#if defined(USE_DATABASE)
     bit_map.clear();
     par_bit_map.clear();
     final_list_of_addr->clear();
     temp_list_of_addr->clear();
+#endif
 }
 
 void find_map(const char *path, map<uint32_t, unique_ptr<frame_pos>> &bit_map,

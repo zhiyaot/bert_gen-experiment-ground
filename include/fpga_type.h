@@ -81,14 +81,15 @@ typedef struct bram_tag
 
 typedef struct logical_memory
 {
-    logical_memory(int nframe_ranges, int wordlen, int word, int num) :
-    nframe_ranges{nframe_ranges}, wordlen{wordlen}, words{word}, num{num}
+    logical_memory(int nframe_ranges, int wordlen, int word, int num, int replica) :
+    nframe_ranges{nframe_ranges}, wordlen{wordlen}, words{word}, num{num}, replica{replica}
     {}
 
     int nframe_ranges;
     int wordlen;
     int words;
     int num;
+    int replica;
 } logical_memory;
 
 

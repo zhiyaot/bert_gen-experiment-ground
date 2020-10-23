@@ -5,13 +5,14 @@
 #ifndef BERT_GEN_FPGA_GEN_H
 #define BERT_GEN_FPGA_GEN_H
 
+#include <algorithm>
+#include <cassert>
+#include <cstring>
 #include <iostream>
 #include <list>
+#include <string>
 
-#include "fpga_err.h"
-#include "fpga_helper.h"
-#include "fpga_parse.h"
-#include "fpga_type.h"
+#include "../include/fpga_type.h"
 
 using namespace std;
 
@@ -22,14 +23,15 @@ using namespace std;
 
 void gen_header(const char *path, const char *header_name);
 
-void print_preproc(map<uint32_t, string> &all_logical, FILE *file);
+void print_preproc(map<uint32_t, string> &all_logical, FILE *outFile, uint32_t IDCODE);
 
 void print_header(FILE *header_h);
 
 void print_logicalNames(FILE *header_c, map<uint32_t, string> &all_logical);
 
 void print_frame(const char *path, pair<uint32_t, string> &logical, FILE *header_c,
-                 list<unique_ptr<logical_memory>> &logical_memories);
+                 list<unique_ptr<logical_memory>> &logical_memories,
+                 map<uint32_t, unique_ptr<frame_pos>> &bit_map, map<uint32_t, unique_ptr<frame_pos>> &par_bit_map);
 
 void find_map(const char *path, map<uint32_t, unique_ptr<frame_pos>> &bit_map,
               map<uint32_t, unique_ptr<frame_pos>> &par_bit_map, list<unique_ptr<bram>> &list_of_bram,

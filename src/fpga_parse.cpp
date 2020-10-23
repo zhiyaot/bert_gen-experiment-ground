@@ -63,7 +63,7 @@ void read_ultra96(FILE *curr, map<uint32_t, unique_ptr<frame_pos>> &bit_map,
         }
         else
         {
-            sscanf(bits, "PARBIT%d", &bit_num) == 1 ? (void) 0 : throw ERROR::GENERAL_ERROR;
+            sscanf(bits, "PARBIT%d", &bit_num) == 1 ? (void) 0 : throw "NOT ULTRA_96 LL";
             if (par_bit_map.find(calc_bit_pos_ultra96(ram_x, ram_y, bit_num, ram_type)) == par_bit_map.end())
             {
                 par_bit_map.insert({calc_bit_pos_ultra96(ram_x, ram_y, bit_num, ram_type),
@@ -76,3 +76,36 @@ void read_ultra96(FILE *curr, map<uint32_t, unique_ptr<frame_pos>> &bit_map,
     fclose(curr);
 }
 
+uint32_t get_IDCODE(FILE* file)
+{
+    uint32_t curr{0};
+    uint8_t now{0};
+
+    while (true)
+    {
+        for (auto i = 0; i < 4; i++)
+        {
+            now = fgetc(file);
+            curr |= now << (3 - i) * 8;
+        }
+
+        if (curr == 0x30018001)
+        {
+            break;
+        }
+        curr = 0;
+    }
+
+    curr = 0;
+    for (auto i = 0; i < 4; i++)
+    {
+        now = fgetc(file);
+        curr |= now << (3 - i) * 8;
+    }
+
+    cout << hex << uppercase << setfill('0') << setw(8) << curr << endl;
+
+    fclose(file);
+
+    return curr;
+}

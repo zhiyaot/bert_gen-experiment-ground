@@ -4,6 +4,7 @@
 
 #ifndef BERT_GEN_FPGA_ERR_H
 #define BERT_GEN_FPGA_ERR_H
+
 enum ERROR
 {
     GENERAL_ERROR,
