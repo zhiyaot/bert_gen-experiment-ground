@@ -1,53 +1,56 @@
 #!/bin/bash
 
-curr="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-bertDir="$( cd "$( dirname $curr )" && pwd )"
+curr="$(realpath "$0")"
+bertDir="$(dirname "$curr")"
+accelNameAddition="accel"
 
 usage() {
-    echo "usage: gen.sh [[-gen dcpFile headerName | [-h] | [-gen_tcl dcpFile headerName] | [-map_gen wkDir mddName] | [-header_gen wkDir]]"
+    echo "usage: gen.sh [-na] -gen baseDir"
 }
 
 header_gen() {
-    # cmake CMakeLists.txt
-    #make clean
-    #make
-    $bertDir/bert_gen/bert_gen $wkDir ${headerName}_uncompressed
-    cp $bertDir/bert_gen/compress/compress_generic.c $wkDir
-    cp $bertDir/bert_gen/compress/ultrascale_plus.? $wkDir
-    cp $bertDir/bert_gen/compress/bert_types.h $wkDir
-    cd $wkDir
-    echo "#include \"${headerName}_uncompressed.h\"" >${headerName}_compress.c
-    echo "#include \"stdio.h\"" >>${headerName}_compress.c
-    echo "#include \"compress_generic.c\"" >>${headerName}_compress.c
-    gcc -c ${headerName}_compress.c
-    gcc -c ultrascale_plus.c
-    gcc -c ${headerName}_uncompressed.c
-    gcc -o ${headerName}_ucompress ${headerName}_compress.o ${headerName}_uncompressed.o ultrascale_plus.o
-    ./${headerName}_ucompress >${headerName}.c
-    cp ${headerName}_uncompressed.h ${headerName}.h
-    rm ultrascale_plus.o ${headerName}_compress.o ${headerName}_uncompressed.o ${headerName}_ucompress
-
+    # had to add slash -- does this differ across OSes? -- AMD 4/17/2021
+    "$bertDir"/bert_gen "$baseDir/" "${headerName}"_uncompressed
+    cp "$bertDir"/compress/compress_generic.c "$baseDir"
+    cp "$bertDir"/accel/accel_all.c "$baseDir"
+    cp "$bertDir"/compress/ultrascale_plus.h "$baseDir"
+    cp "$bertDir"/compress/7series.h "$baseDir"
+    cp "$bertDir"/compress/bert_types.h "$baseDir"
+    cp "$bertDir"/compress/compressed_bert_types.h "$baseDir"
+    cd "$baseDir" || exit
+    echo "#include \"stdint.h\"" >"${headerName}"_compress.c
+    # shellcheck disable=SC2129
+    echo "#include \"${headerName}_uncompressed.h\"" >>"${headerName}"_compress.c
+    echo "#include \"stdio.h\"" >>"${headerName}"_compress.c
+    echo "#include \"compress_generic.c\"" >>"${headerName}"_compress.c
+    gcc -c "${headerName}"_compress.c
+    gcc -c "${headerName}"_uncompressed.c
+    gcc -o "${headerName}"_ucompress "${headerName}"_compress.o "${headerName}"_uncompressed.o
+    ./"${headerName}"_ucompress >"${headerName}".c
+    sed "s/bert_types/compressed_bert_types/g" <${headerName}_uncompressed.h | sed "s/logical_memory/compressed_logical_memory/g" > ${headerName}.h
+    echo "#include \"stdint.h\"" >"${headerName}"_uaccel.c
+    # shellcheck disable=SC2129
+    echo "#include \"${headerName}.h\"" >>"${headerName}"_uaccel.c
+    echo "#include \"stdio.h\"" >>"${headerName}"_uaccel.c
+    echo "#include \"accel_all.c\"" >>"${headerName}"_uaccel.c
+    # the bert_types.h are different -- this one for compressed file...
+    cp "$bertDir"/accel/bert_types.h .
+    gcc -c "${headerName}".c
+    gcc -c "${headerName}"_uaccel.c
+    gcc -o "${headerName}"_uaccel_${accelNameAddition} "${headerName}".o "${headerName}"_uaccel.o
+    ./"${headerName}"_uaccel_${accelNameAddition} "${headerName}"_tables
+    mv "${headerName}".c "${headerName}"_header.c
+    cat "${headerName}"_header.c "${headerName}"_tables.c  > "${headerName}".c
+    rm "${headerName}"_compress.o "${headerName}"_uncompressed.o "${headerName}"_ucompress "${headerName}"_uaccel.o "${headerName}".o
 }
 
 map_gen() {
-    python3 $bertDir/bert_gen/gen_map.py $wkDir $mddName
+    python3 "$bertDir"/gen_map.py "$baseDir" "$mddName"
 }
 
-call_vivado() {
-    vivado -mode batch -source $1
-}
-
-tcl_gen() {
-    rm $2/*.tcl
-    echo "open_checkpoint $1" >$2/bert.tcl
-    echo "source $wkDir/mdd_make.tcl" >>$2/bert.tcl
-    echo "mddMake $wkDir/$header_name" >>$2/bert.tcl
-    echo "write_bitstream -logic_location_file $2/$header_name" >>$2/bert.tcl
-
-    cp $bertDir mdd_make.tcl $wkDir
-}
 
 ##### Main
+
 if [ $# -eq 0 ]; then
     usage
 fi
@@ -57,62 +60,37 @@ while test $# -gt 0; do
     -h | --help)
         usage
         shift
+        exit
+        ;;
+
+    -na | --no_accel)
+        accelNameAddition="_noaccel"
+        shift
         ;;
 
     -gen)
-        if [ $# -gt 2 ]; then
-            shift
-            dcp=$1
-            header_name=$2
-            baseDir=dirname $dcp
-            $(mkdir $baseDir/bert_src)
-            wkDir=$baseDir/bert_src
-            tcl_gen $dcp $wkDir
-            call_vivado $wkDir/bert.tcl
-            mddName=$header_name.mdd
-            map_gen
-            header_gen
-        else
-            usage
-            exit
-        fi
-        ;;
-
-    -gen_tcl)
-        if [ $# -gt 2 ]; then
-            shift
-            dcp="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)/$(basename "${BASH_SOURCE[1]}")"
-            header_name=$2
-            baseDir="$( cd "$( dirname $dcp )" && pwd )"
-            mkdir -p $baseDir/bert_src
-            wkDir=$baseDir/bert_src
-            echo $wkDir
-            tcl_gen $dcp $wkDir
-            shift
-            exit
-        else
-            usage
-            exit
-        fi
-        ;;
-
-    -map_gen)
-        if [ $# -gt 2 ]; then
-            shift
-            wkDir=$1
-            mddName=$2
-            map_gen
-        else
-            usage
-            exit
-        fi
-        ;;
-
-    -header_gen)
         if [ $# -gt 1 ]; then
+            echo -e "-gen detected...\n"
             shift
-            wkDir = $1
+            baseDir="$(realpath "$1")"
+            shift
+            headerName="mydesign"
+            shift
+            #mkdir -p $baseDir/bert_src
+            #wkDir=$baseDir/bert_src
+            #echo -e "[10%] Generating bert.tcl in $wkDir\n"
+            #tcl_gen
+            #echo -e "[20%] Generated bert.tcl in $wkDir\n"
+            #tcl=$wkDir/bert.tcl
+            mddName="top.mdd"
+            echo -e "[30%] Generating .bram .info mapping in $baseDir\n"
+            map_gen
+            echo -e "[60%] Generated .bram .info mapping in $baseDir\n"
+            echo -e "[60%] Generating header files in $baseDir\n"
             header_gen
+            echo -e "[100%] Generated header files in $baseDir\n"
+            echo -e "bert_gen complete, exiting....."
+            exit
         else
             usage
             exit

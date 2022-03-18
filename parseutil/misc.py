@@ -1,8 +1,8 @@
-# File: misc.py
-# Author: Brent Nelson
-# Created: 25 June 2020
-# Description:
-#    Miscellaneous routines
+# Portions of this software derived from code in the prjxray-bram-patch open source repository (https://github.com/symbiflow/prjxray-bram-patch).  
+# Use of that source code is governed by a ISC-style
+# license that can be found in the COPYING file in that repository or at
+# https://opensource.org/licenses/ISC
+#
 
 import parseutil.parse_mdd as parse_mdd
 
@@ -65,8 +65,9 @@ def readInitStringsFromFASMFile(fasmFile):
 
 
 # Return a dict mapping names to [words, bits] lists
+# !!! might not be usage due to change in the read mdd function
 def getMDDMemories(mddName):
-    mdd = parse_mdd.parse_mdd.read_mdd(mddName)
+    mdd, _ = parse_mdd.parse_mdd.read_mdd(mddName)
     lst = dict()
     for m in mdd:
         # Create memory name from cell_name and ram_name

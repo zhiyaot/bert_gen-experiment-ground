@@ -1,3 +1,8 @@
+# Portions of this software derived from code in the prjxray-bram-patch open source repository (https://github.com/symbiflow/prjxray-bram-patch).  
+# Use of that source code is governed by a ISC-style
+# license that can be found in the COPYING file in that repository or at
+# https://opensource.org/licenses/ISC
+#
 import sys
 from pathlib import Path
 import pathlib
@@ -23,10 +28,11 @@ class Cell:
         self._rwb = int(cell['WRITE_WIDTH_A'])
         self._wwb = int(cell['WRITE_WIDTH_B'])
         # self._offset = int(cell['RAM_OFFSET'])
-        self.addr_beg = int(cell['BRAM_ADDR_BEGIN'])
-        self.addr_end = int(cell['BRAM_ADDR_END'])
-        self.slice_beg = int(cell['BRAM_SLICE_BEGIN'])
-        self.slice_end = int(cell['BRAM_SLICE_END'])
+        self.addr_beg = int(cell['BRAM_ADDR_BEGIN'] if cell['BRAM_ADDR_BEGIN'] != 'NONE' else cell['RAM_ADDR_BEGIN'])
+        self.addr_end = int(cell['BRAM_ADDR_END'] if cell['BRAM_ADDR_END'] != 'NONE' else cell['RAM_ADDR_END'])
+        self.slice_beg = int(cell['BRAM_SLICE_BEGIN'] if cell['BRAM_SLICE_BEGIN'] != 'NONE' else cell['RAM_SLICE_BEGIN'])
+        self.slice_end = int(cell['BRAM_SLICE_END'] if cell['BRAM_SLICE_END'] != 'NONE' else cell['RAM_SLICE_END'])
+        self.offset = cell["STARTINGOFFSET"]
         # self. = cell['RAM_ADDR_BEGIN']
         # self. = cell['RAM_ADDR_END']
         # self. = cell['RAM_SLICE_BEGIN']
@@ -44,28 +50,25 @@ class Cell:
         )
         return s
 
+
 def insolateUniqueLogical(mdd, verbose=False):
     if isinstance(mdd, pathlib.Path):
         mdd = str(mdd)
 
-    temp_mdd_data = read_mdd(mdd)
+    temp_mdd_data, part = read_mdd(mdd)
 
     mdd_data = [
         '/'.join(m.cell_name.split('/')[:-1]) + '/' +
         m.ram_name for m in temp_mdd_data
     ]
 
-    return set(mdd_data)
+    return set(mdd_data), temp_mdd_data, part
 
-def printRelatedBRAM(dir, mdd, logical, i):
-    if isinstance(mdd, pathlib.Path):
-        mdd = str(mdd)
 
-    # Read and filter the MDD file contents based on selectedMemToPatch
-    tmp_mdd_data = read_mdd(mdd)
+def printRelatedBRAM(dir, logical, i, fullData):
 
     mdd_data = [
-        m for m in tmp_mdd_data
+        m for m in fullData
         # Reassemble RAM name by removing the ram_reg_*_* part from it.
         # The user wants to specify 'mem/ram' instead of mem/ram_reg_0_0/ram
         if '/'.join(m.cell_name.split('/')[:-1]) + '/' +
@@ -77,25 +80,18 @@ def printRelatedBRAM(dir, mdd, logical, i):
             f.write(m.type + '_' + m.placement + '\n')
 
 
-def readAndFilterMDDData(mdd, selectedMemToPatch, verbose=False):
-    # Handles either Path or strings
-    if isinstance(mdd, pathlib.Path):
-        mdd = str(mdd)
-
-    # Read and filter the MDD file contents based on selectedMemToPatch
-    tmp_mdd_data = read_mdd(mdd)
-
+def readAndFilterMDDData(selectedMemToPatch, fullData, verbose=False):
     mdd_data = [
-        m for m in tmp_mdd_data
+        m for m in fullData
         # Reassemble RAM name by removing the ram_reg_*_* part from it.
         # The user wants to specify 'mem/ram' instead of mem/ram_reg_0_0/ram
         if '/'.join(m.cell_name.split('/')[:-1]) + '/' +
-        m.ram_name == selectedMemToPatch
+           m.ram_name == selectedMemToPatch
     ]
     if len(mdd_data) == 0:
         print(
             "No memories found in MDD file corresponding to {}, aborting.".
-            format(selectedMemToPatch)
+                format(selectedMemToPatch)
         )
         exit(1)
 
@@ -116,6 +112,7 @@ def main():
 
 def read_mdd(mddfile):
     cells = {}
+    part = ''
     with open(mddfile, 'r') as f:
         addr = ''
         for ln in f:
@@ -130,6 +127,9 @@ def read_mdd(mddfile):
                 continue
             elif addr != '':
                 cells[addr][ln[0]] = ln[1]
+            elif ln[0] == 'PART':
+                part = ln[1]
+
                 # print(f'Assigned {ln[1]} to parameter {ln[0]} for {addr}')
     # for key, cell in cells.items():
     #     print(f'CELL {key}')
@@ -144,7 +144,7 @@ def read_mdd(mddfile):
     if WIDTH_MISMATCH_FLAG and type(mddfile) == pathlib.PosixPath:
         (mddfile.parent / 'WIDTH_MISMATCH').touch()
 
-    return cell_list
+    return cell_list, part
 
 
 def get_width(mdd):

@@ -1,9 +1,9 @@
-﻿# File: bitMapping.py
-# Author: Brent Nelson
-# Created: 24 June 2020
-# Description:
-#    Will compute bit mappings from init.mem bit locations to FASM INIT/INITP lines/bits and to frame/bitoffset values
-
+﻿# Portions of this software derived from code in the prjxray-bram-patch open source repository
+# (https://github.com/symbiflow/prjxray-bram-patch).  
+# Use of that source code is governed by a ISC-style
+# license that can be found in the COPYING file in that repository or at
+# https://opensource.org/licenses/ISC
+#
 import argparse
 import os
 import pathlib
@@ -16,7 +16,7 @@ import parseutil.parse_mdd as parse_mdd
 # Holds a single mapping record from init.mem bit to FASM and bitstream
 class Mapping:
     def __init__(
-            self, word, bit, type, loc, bits, fasmY, fasmINITP, fasmLine, fasmBit, xyz
+            self, word, bit, type, loc, bits, fasmY, fasmINITP, fasmLine, fasmBit, xyz, offset
             # frameAddr, frameBitOffset
     ):
         self.word = word
@@ -29,15 +29,16 @@ class Mapping:
         self.fasmLine = fasmLine
         self.fasmBit = fasmBit
         self.xyz = xyz
+        self.offset = offset
         # self.frameAddr = frameAddr
         # self.frameBitOffset = frameBitOffset
 
     def toString(self):
-        return "word={}, bit={}, loc = {}_{}, bits = {}, fasmY={}, fasmINITP={}, fasmLine={}, fasmBit={} xyz={}\n".format(
+        return "word={}, bit={}, loc={}_{}, bits={}, fasmY={}, fasmINITP={}, " \
+               "fasmLine={}, fasmBit={}, xyz={}, offset={}\n".format(
             self.word, self.bit, self.type, self.loc, self.bits, self.fasmY,
-            1 if self.fasmINITP else 0, self.fasmLine, self.fasmBit, self.xyz
-            # 3, self.frameAddr,
-            # self.frameBitOffset
+            1 if self.fasmINITP else 0, self.fasmLine, self.fasmBit, self.xyz,
+            self.offset
         )
 
     def toStringShort(self):
@@ -221,7 +222,7 @@ def createBitMapping(
             # 2.k: Finally, build a Mapping object and add it to the mappings list (to be returned below)
             mappings.append(
                 Mapping(
-                    w, b, cell.type, cell.placement, bits, y01, parity, initRow, bbb, xyz
+                    w, b, cell.type, cell.placement, bits, y01, parity, initRow, bbb, xyz, cell.offset
                     # , frameNum,
                     # frameBitOffset
                 )
@@ -319,12 +320,12 @@ def findSegOffset(segs, lr, y01, initinitp, initnum, initbit):
 ##############################################################################################
 def createBitMappings(
         memName,
-        mddName,
+        fullData,
         verbose,
         printMappings
 ):
     # 1. Load the MDD file.
-    mdd_data = parse_mdd.readAndFilterMDDData(mddName, memName)
+    mdd_data = parse_mdd.readAndFilterMDDData(memName, fullData)
     words, bits = misc.getMDDMemorySize(mdd_data)
     # print("Words = {}, bits = {}".format(words, bits))
 
@@ -375,15 +376,17 @@ if __name__ == "__main__":
 
     baseDir = pathlib.Path(args.baseDir).resolve()
 
-    all_logical = parse_mdd.insolateUniqueLogical(baseDir / args.mddname, args.verbose)
-
+    all_logical, fullData, part = parse_mdd.insolateUniqueLogical(baseDir / args.mddname, args.verbose)
+    all_logical = list(all_logical)
+    all_logical.sort()
     i = 0
     with open(args.baseDir + '/' + 'list_of_logical.list', 'w') as f_s:
+        f_s.writelines('PART->' + part + '\n')
         for logical in all_logical:
             f_s.writelines(logical + ' -> mem_' + str(i) + '\n')
-            parse_mdd.printRelatedBRAM(args.baseDir, baseDir / args.mddname, logical, i)
+            parse_mdd.printRelatedBRAM(args.baseDir, logical, i, fullData)
             mappings = createBitMappings(
-                logical, baseDir / args.mddname, args.verbose,
+                logical, fullData, args.verbose,
                 args.printmappings
             )
 

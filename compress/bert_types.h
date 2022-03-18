@@ -12,6 +12,7 @@ struct logical_memory {
    int nframe_ranges;
    int wordlen;
    int words;
+   int replicas;
    struct frame_range *frame_ranges;
    struct bit_loc *bit_locations;
 };
